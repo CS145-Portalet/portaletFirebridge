@@ -1,6 +1,8 @@
 from fastapi import FastAPI, HTTPException, Request, Header
 import os
 import json
+import jwt
+
 from google.oauth2 import service_account
 from google.cloud import firestore
 from pydantic import BaseModel
@@ -34,17 +36,25 @@ async def validate_token(device_id: str, authorization: str = Header(...)):
         raise HTTPException(status_code=401, detail="Invalid token format")
 
     token = authorization.split(" ")[1]
-    doc = db.collection("device_tokens").document(token).get()
-
+    doc = db.collection("device_tokens").document(device_id).get()
     if not doc.exists:
         raise HTTPException(status_code=401, detail="Token not found")
 
     data = doc.to_dict()
-
     if not data.get("active", False):
         raise HTTPException(status_code=403, detail="Token inactive")
+    SECRET_KEY=data.get("secret_key")
+    
+ 
+    try:
+        decoded = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
 
-    if data.get("device_id") != device_id:
+    if decoded["device_id"] != device_id:
         raise HTTPException(status_code=403, detail="Token not valid for this device")
 
     return True    
