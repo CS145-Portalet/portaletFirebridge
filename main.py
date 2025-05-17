@@ -14,7 +14,6 @@ try:
     if firebase_key_json:
         creds_dict = json.loads(firebase_key_json)
     else:
-        # Fallback: load from local file
         with open("secrets/serviceAccountKey.json", "r") as f:
             creds_dict = json.load(f)
 
