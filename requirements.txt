@@ -3,3 +3,4 @@ uvicorn
 google-cloud-firestore
 google-auth
 pydantic
+PyJWT
