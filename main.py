@@ -24,18 +24,40 @@ except Exception as e:
 @app.get("/")
 async def root():
     
-    return {"message": "Hello World"}
+    return {"message": "Hello this is Group 19's Portalet API"}
 
 
 
 @app.get("/deviceTable")
 async def get_devices():
     try:
-        device_ref = db.collection("device")
-        docs = device_ref.stream()
+        deviceTable_ref = db.collection("device")
+        docs = deviceTable_ref.stream()
         devices = [doc.to_dict() for doc in docs]
-        return {"devices": devices}
+        return {"deviceTable": devices}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching devices: {e}")
+    
+@app.get("/deviceTable/{device_id}")
+async def get_device(device_id: str):
+    try:
+        device_ref = db.collection("device").document(device_id)
+        docs = device_ref.get()
+        if doc.exists:
+            return {"device": doc.to_dict()}
+        else:
+            raise HTTPException(status_code=404, detail="Device not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching device: {e}")
+    
+@app.get("/deviceTable/{device_id}/deviceLog")
+async def get_logs(device_id: str):
+    try:
+        logs_ref = db.collection("device").document(device_id).collection("device_log")
+        logs = logs_ref.stream()
+        return [log.to_dict() for log in logs]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching Logs for device {device_id}: {e}")
+
 
 
