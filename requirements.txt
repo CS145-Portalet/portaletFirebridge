@@ -2,3 +2,4 @@ fastapi[all]
 uvicorn
 google-cloud-firestore
 google-auth
+pydantic
