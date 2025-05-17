@@ -1,5 +1,4 @@
-from typing import Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Header
 import os
 import json
 from google.oauth2 import service_account
@@ -28,6 +27,28 @@ except Exception as e:
 class DeviceLog(BaseModel):
     status_int: int
     created_at: int
+    
+    
+async def validate_token(device_id: str, authorization: str = Header(...)):
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid token format")
+
+    token = authorization.split(" ")[1]
+    doc = db.collection("device_tokens").document(token).get()
+
+    if not doc.exists:
+        raise HTTPException(status_code=401, detail="Token not found")
+
+    data = doc.to_dict()
+
+    if not data.get("active", False):
+        raise HTTPException(status_code=403, detail="Token inactive")
+
+    if data.get("device_id") != device_id:
+        raise HTTPException(status_code=403, detail="Token not valid for this device")
+
+    return True    
+    
 
 
 @app.get("/")
@@ -69,7 +90,8 @@ async def get_logs(device_id: str):
         raise HTTPException(status_code=500, detail=f"Error fetching Logs for device {device_id}: {e}")
 
 @app.post("/deviceTable/{device_id}/deviceLog")
-async def add_device_log(device_id: str, log: DeviceLog):
+async def add_device_log(device_id: str, log: DeviceLog, authorization: str = Header(...)):
+    await validate_token(device_id, authorization)    
     try:
         device_doc = db.collection("device").document(device_id).get()
         if not device_doc.exists:
