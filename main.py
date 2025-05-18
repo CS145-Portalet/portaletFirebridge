@@ -38,7 +38,7 @@ async def validate_token(device_id: str, authorization: str = Header(...)):
     token = authorization.split(" ")[1]
     doc = db.collection("device_tokens").document(device_id).get()
     if not doc.exists:
-        raise HTTPException(status_code=401, detail="Token not found")
+        raise HTTPException(status_code=401, detail="Unauthorized access")
 
     data = doc.to_dict()
     if not data.get("active", False):
