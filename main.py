@@ -1,11 +1,13 @@
-from fastapi import FastAPI, HTTPException, Request, Header
 import os
 import json
 import jwt
-
+import secrets
+from datetime import datetime, timezone, timedelta
 from google.oauth2 import service_account
 from google.cloud import firestore
 from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Request, Header
+
 
 app = FastAPI()
 
@@ -29,6 +31,11 @@ except Exception as e:
 class DeviceLog(BaseModel):
     status_int: int
     created_at: int
+    
+class dev_auth(BaseModel):
+    device_id: str
+    created_at: int
+    signature: str
     
     
 async def validate_token(device_id: str, authorization: str = Header(...)):
@@ -118,3 +125,72 @@ async def add_device_log(device_id: str, log: DeviceLog, authorization: str = He
         raise he
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to add log: {e}")
+    
+    
+@app.post("/deviceTable/{device_id}/auth")
+async def add_device_log(device_id: str,auth: dev_auth,):
+   
+    try:
+        token_doc_ref = db.collection("device_tokens").document(device_id)
+        token_doc=token_doc_ref.get()
+        if not token_doc.exists:
+            raise HTTPException(status_code=404, detail="Unauthorized Access")
+        device_secret=token_doc.to_dict()["sharedKey"]
+        token=auth.dict()["signature"]
+        
+        try:
+            decoded = jwt.decode(token, device_secret, algorithms=["HS256"])
+            print("Valid token. Payload:", decoded)
+            print(decoded["device_id"])
+        except jwt.ExpiredSignatureError as e:
+            raise Exception("Token has expired") from e
+        except jwt.InvalidTokenError as e:
+            raise Exception("Invalid token") from e
+        now_utc = datetime.now(timezone.utc)
+        current_time = int(now_utc.timestamp())  # iat
+        expires_at_access = int((now_utc + timedelta(minutes=15)).timestamp())  # exp for access token
+        expires_at_refresh = int((now_utc + timedelta(hours=1)).timestamp()) 
+        
+            
+        # Access Token Generation
+        accessTK_payload={
+            "type":"Bearer ",
+            "device_id":device_id,
+            "iat": current_time,
+            "exp": expires_at_access
+        }
+        accessTK_ref = db.collection("device_tokens").document(device_id).collection("AR_Tokens").document("accessToken")
+        accessTK_ref.set(accessTK_payload)
+        
+        accessTK_signed = jwt.encode(accessTK_payload, device_secret, algorithm="HS256")
+                
+        # Refresh Token Generation
+        refreshTK_payload={
+            "type":"Bearer ",
+            "device_id":device_id,
+            "iat": current_time,
+            "exp": expires_at_refresh
+        }
+        
+        refreshTK_ref = db.collection("device_tokens").document(device_id).collection("AR_Tokens").document("refreshToken")
+        refreshTK_ref.set(refreshTK_payload)
+        refreshTK_signed = jwt.encode(refreshTK_payload, device_secret, algorithm="HS256")
+        try:
+            decoded = jwt.decode(refreshTK_signed, device_secret, algorithms=["HS256"])
+            print("Valid token. Payload:", decoded)
+            print(decoded["device_id"])
+        except jwt.ExpiredSignatureError:
+            print("Token expired")
+        except jwt.InvalidTokenError:
+            print("Invalid token")
+
+        
+
+        return {"success": True,  "message": "General Kenobi", "refreshTK": refreshTK_signed,"accessTK": accessTK_signed}
+
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unauthorized Access: {e}")
+    
